@@ -21,38 +21,39 @@ Generate a Temporary Access Token (valid for 24 hours).<br>
 Save your Phone Number ID and WhatsApp Business Account ID.<br>
 
 ## Step 2: Create Node App
-1. Install Node. <br>
+### 1. Install Node. <br>
 If you haven’t installed Node.js, download it from Node.js official site and install it.<br>
-2. Create a Project Directory
+### 2. Create a Project Directory<br>
 ```cmd
 mkdir my-node-app
 cd my-node-app
 ```
-3. Initialize the Node.js Project
-Run:
+### 3. Initialize the Node.js Project<br>
+Run:<br>
 ```cmd
 npm init -y
 ```
-This creates a package.json file with default settings.
-4. Install Dependencies
+This creates a package.json file with default settings.<br>
+### 4. Install Dependencies<br>
 ```cmd
 npm install dotenv axios express nodemon
 ```
-5.Create .env file 
-add 
-ACCESS_TOKEN=
-PHONE_NUMBER_ID =
-URL=
-TO=
+### 5.Create .env file <br>
+and add <br>
+ACCESS_TOKEN=<br>
+PHONE_NUMBER_ID =<br>
+URL=<br>
+TO=<br>
+from something like this <br>
+![Untitled](https://github.com/user-attachments/assets/096eaa58-1131-4311-a06f-6e5095f160d5)
 
-![image](https://github.com/user-attachments/assets/68b3b3af-17c8-403b-992b-ca5d51cabfbf)
 
-5. Run the App
-Start the server using:
+### 6. Run the App<br>
+Start the server using:<br>
 ```cmd
 nodemon index.js
 ```
-6 Open in Browser
+### 7 Open in Browser<br>
 Go to 
 [Open Localhost](http://localhost:3000)
 in your browser
