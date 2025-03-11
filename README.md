@@ -5,8 +5,8 @@ Built a WhatsApp API Integration Application using Express.js with a simple fron
 # Steps to do this project
 
 ## Step 1: Get Access to WhatsApp Business API
-Create a Meta Developer Account:
-Go to Meta for Developers and sign in.
+Create a Meta Developer Account: 
+  Go to Meta for Developers and sign in.
 Create an App:
 Navigate to My Apps > Create App > Choose Business as the app type.
 Set Up WhatsApp API:
