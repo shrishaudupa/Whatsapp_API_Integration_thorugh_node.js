@@ -19,3 +19,5 @@ Register a phone number for sending messages.<br>
 Go to the WhatsApp section of your app.<br>
 Generate a Temporary Access Token (valid for 24 hours).<br>
 Save your Phone Number ID and WhatsApp Business Account ID.<br>
+
+## Step 2: Create Node App
