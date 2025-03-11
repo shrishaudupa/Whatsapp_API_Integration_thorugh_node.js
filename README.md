@@ -21,3 +21,10 @@ Generate a Temporary Access Token (valid for 24 hours).<br>
 Save your Phone Number ID and WhatsApp Business Account ID.<br>
 
 ## Step 2: Create Node App
+
+```node
+def greet():
+    print("Hello, World!")
+
+greet()
+
