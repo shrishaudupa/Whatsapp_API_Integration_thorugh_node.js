@@ -55,7 +55,7 @@ nodemon index.js
 ```
 ### 7 Open in Browser<br>
 Go to 
-[Open Localhost](http://localhost:3000)
+[Open Localhost](http://localhost:3000)  Localhost:3000
 in your browser
 
 
