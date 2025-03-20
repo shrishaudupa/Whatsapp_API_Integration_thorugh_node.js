@@ -1,151 +1,204 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import axios from 'axios';
-import express from 'express';
+import express, { urlencoded, json } from "express";
 import bodyParser from "body-parser";
-import fs from "fs"
+import cleverbot from "cleverbot-free";
+import cors from "cors";
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { getAccessToken } from './Services/getAccessToken.js';
+import { getPageDetails } from './Controllers/getPageDetails.js';
+import { WebSocketServer } from 'ws';
+import http from 'http';
+import db from './config/db.js';
 
-const VERIFY_TOKEN = "my_secure_token";
+import webHookRoute from './routes/Webhook.js';
+import templateRoutes from './routes/sendTemplate.js';
+import sendImageRoute from './routes/sendImage.js';
+import sendTextRoute from './routes/sendText.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.resolve(__dirname, './config/.env') });
 
 const app = express();
-app.use(bodyParser.json());
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
 
+const PORT = 4000;
+const VERIFY_TOKEN = "my_secure";
+const TARGET_WHATSAPP_NUMBER = process.env.TO;
 
-app.use(express.urlencoded({ extended: true }));
-
-app.use(express.static('public'));
-
-
-app.set('view engine', 'ejs');
-
-app.set('views', './views'); 
-
-
-const TOKEN_FILE_PATH = "./whatsapp_token.json";
-
-function getAccessToken() {
-    if (fs.existsSync(TOKEN_FILE_PATH)) {
-        const tokenData = JSON.parse(fs.readFileSync(TOKEN_FILE_PATH, "utf-8"));
-        return tokenData.access_token;
-    } else {
-        console.error("❌ ERROR: Token file not found!");
-        return null;
-    }
+if (!TARGET_WHATSAPP_NUMBER) {
+  console.error("Error: Environment variable 'TO' (target WhatsApp number) is not set.");
+  process.exit(1);
 }
 
-app.get('/', (req, res) => {
-  res.render('index', { title: 'Welcome to Whatsapp Api Integration application'});
-  const VERIFY_TOKEN ='my_secret';
+app.use(bodyParser.json());
+app.use(cors());
+app.use(json());
+app.use(urlencoded({ extended: true }));
+app.use(express.static('public'));
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
 
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
+let activeChatSocket = null;
 
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log("Webhook verified successfully.");
-    res.status(200).send(challenge);
-  } else {
-    console.log("Webhook verification failed.");
-    res.sendStatus(403);
+var id = 0;
+const sendMessage = async (recipient, messageText) => {
+  if (!recipient) {
+    console.error("Error: sendMessage called with no recipient.");
+    return;
   }
+
+  console.log(`Attempting to send to ${recipient}: "${messageText}"`);
+
+  try {
+    id++;
+    db.query(
+      "UPDATE users_records SET server_message = ? WHERE id = ?",
+      [messageText, id],
+      (err, result) => {
+        if (err) {
+          console.error("Database Insert Error:", err);
+          return;
+        }
+        console.log("Database Insert Successful:", result);
+      }
+    );
+
+    const accessToken = await getAccessToken();
+    await axios.post(
+      process.env.URL,
+      {
+        messaging_product: "whatsapp",
+        to: recipient,
+        type: "text",
+        text: { body: messageText },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    console.log(`Message sent successfully to ${recipient}`);
+  } catch (error) {
+    console.error(
+      "Error sending WhatsApp message:",
+      error.response?.data || error.message || error
+    );
+
+    if (activeChatSocket && activeChatSocket.readyState === WebSocket.OPEN) {
+      activeChatSocket.send(
+        JSON.stringify({ type: "error", payload: "Failed to send message to WhatsApp." })
+      );
+    }
+  }
+};
+
+wss.on('connection', (ws) => {
+  console.log('Client connected via WebSocket');
+
+  if (activeChatSocket && activeChatSocket !== ws) {
+    console.log('Replacing existing active chat socket.');
+    activeChatSocket.close(1000, 'Replaced by new connection');
+  }
+  activeChatSocket = ws;
+
+  ws.on('message', async (message) => {
+    console.log('Received message from web client:', message.toString());
+    try {
+      const parsedMessage = JSON.parse(message.toString());
+
+      if (parsedMessage.type === 'chat_message' && parsedMessage.payload) {
+        const textToSend = parsedMessage.payload;
+        await sendMessage(TARGET_WHATSAPP_NUMBER, textToSend);
+      } else {
+        console.log("Received unknown message format from client:", parsedMessage);
+      }
+    } catch (error) {
+      console.error('Failed to process WebSocket message or send to WhatsApp:', error);
+      ws.send(JSON.stringify({ type: 'error', payload: 'Failed to process your message.' }));
+    }
+  });
+
+  ws.on('close', (code, reason) => {
+    console.log(`Client disconnected. Code: ${code}, Reason: ${reason ? reason.toString() : 'N/A'}`);
+    if (activeChatSocket === ws) {
+      console.log('Active chat socket disconnected.');
+      activeChatSocket = null;
+    }
+  });
+
+  ws.on('error', (error) => {
+    console.error('WebSocket error:', error);
+    if (activeChatSocket === ws) {
+      activeChatSocket = null;
+    }
+  });
+
+  ws.send(JSON.stringify({ type: 'connection_ack', payload: 'WebSocket connection established.' }));
 });
 
+let activeChats = new Map();
+const TOKEN_FILE_PATH = "./whatsapp_token.json";
+app.get('/', (req, res) => {
+  res.render('index', { title: 'Welcome to Whatsapp Api Integration application' });
+});
 
-async function getPageDetails(accessToken){
-  const url = `https://graph.facebook.com/v22.0/{form_id}/leads?access_token=${accessToken}
-`;
+app.use("/webhook", webHookRoute);
 
-  try{
-    const response = await axios.get(url);
-    console.log(response.data);
-  }catch(error){
-    console.error("Error fething user data", error.response ? error.response.data : error.message)
-  }
+app.get('/', (req, res) => {
+  res.render('index', { title: 'Welcome to Whatsapp Api Integration application' });
+});
 
-}
+app.post("/webhook", async (req, res) => {
+  console.log("Incoming WhatsApp Webhook:", JSON.stringify(req.body, null, 2));
 
-async function sendTemplateMessage() {
-  try {
-    const response = await axios({
-      url: process.env.URL,
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${await getAccessToken()}`,
-        'Content-Type': 'application/json',
-      },
-      data: JSON.stringify({
-        messaging_product: 'whatsapp',
-        to: process.env.TO,
-        type: 'template',
-        template: {
-          name: 'hello_world',
-          language: {
-            code: 'en_US',
-          },
-        },
-      }),
-    });
-    console.log(response.data);
-  } catch (error) {
-    if (error.response) {
-      console.error('Response Error:', error.response.data);
-      console.error('Status Code:', error.response.status);
-      console.error('Headers:', error.response.headers);
-    } else if (error.request) {
-      console.error('Request Error:', error.request);
-    } else {
-      console.error('Error:', error.message);
-    }
-  }
-}
+  const entry = req.body?.entry?.[0];
+  const changes = entry?.changes?.[0];
+  const value = changes?.value;
 
+  if (value?.messaging_product === "whatsapp" && value?.messages?.length > 0) {
+    const message = value.messages[0];
+    const sender = message.from;
+    const messageType = message.type;
 
-async function sendTextMessage(){
-  const response = await axios({
-    url: process.env.URL,
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${await getAccessToken()}`,
-      'Content-Type': 'application/json',
-    },
-    data: JSON.stringify({
-      messaging_product: 'whatsapp',
-      to: process.env.TO,
-      type: 'text',
-      text: {
-        body:'This is a text message'
-      },
-    }),
-  });
-  console.log(response.data);
-}
+    if (messageType === "text" && sender === TARGET_WHATSAPP_NUMBER) {
+      const text = message.text?.body;
 
-async function sendMediaMessage() {
-  const response = await axios({
-      url: process.env.URL,
-      method: 'post',
-      headers: {
-          Authorization: `Bearer ${await getAccessToken()}`,
-          'Content-Type': 'application/json'
-      },
-      data: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: process.env.TO,
-          type: 'image',
-          image:{
-              link: 'https://dummyimage.com/600x400/000/fff.png&text=Shrisha Udupa',
-              caption: 'This is a media message'
+      db.query(
+        "INSERT INTO users_records(phone_number,whatsapp_text) VALUES (?, ?)",
+        [sender, text],
+        (err, result) => {
+          if (err) {
+            console.error("Database Insert Error:", err);
+            return;
           }
-      })
-  })
+          console.log("Database Insert Successful:", result);
+        }
+      );
+      console.log(`Received text message from ${sender}: "${text}"`);
 
-  
+      if (activeChatSocket && activeChatSocket.readyState === WebSocket.OPEN) {
+        console.log("Forwarding message to active WebSocket client.");
+        activeChatSocket.send(JSON.stringify({ type: 'whatsapp_message', payload: text }));
+      } else {
+        console.log("No active WebSocket client to forward the message to.");
+      }
+    } else {
+      console.log(`Ignoring message type '${messageType}' or sender '${sender}' (expected '${TARGET_WHATSAPP_NUMBER}')`);
+    }
+  } else {
+    console.log("Received webhook event is not a WhatsApp message or is empty.");
+  }
 
-  console.log(response.data)    
-}
+  res.sendStatus(200);
+});
 
 getPageDetails(await getAccessToken())
-
-
 
 app.get("/webhook", (req, res) => {
   let challenge = req.query["hub.challenge"];
@@ -153,25 +206,18 @@ app.get("/webhook", (req, res) => {
   res.status(200).send(challenge);
 });
 
+app.use('/send-template', templateRoutes);
+app.use('/send-image', sendImageRoute);
+app.use('/send-text', sendTextRoute);
 
-app.post('/send-template',(req,res)=>{
-  sendTemplateMessage();
-  res.send('<h3>✅ Template message sent!</h3><a href="/">Go Back</a>')
-})
-
-app.post('/send-image',(req,res)=>{
-  sendMediaMessage();
-  res.send('<h3>✅ Image message sent!</h3><a href="/">Go Back</a>')
-})
-app.post('/send-text',(req,res)=>{
-  sendTextMessage();
-  res.send('<h3>✅ Template image sent!</h3><a href="/">Go Back</a>')
-})
 app.post("/webhook", (req, res) => {
   console.log("Facebook Webhook Event Received:", JSON.stringify(req.body, null, 2));
   res.status(200).send("EVENT_RECEIVED");
 });
 
-app.listen(3000, () => {
-  console.log('Server is running on port 3000');
+server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+  console.log(`WebSocket server is listening on ws://localhost:${PORT}`);
+  console.log(`Targeting WhatsApp number: ${TARGET_WHATSAPP_NUMBER}`);
+  console.log(`Webhook Verify Token: ${VERIFY_TOKEN}`);
 });

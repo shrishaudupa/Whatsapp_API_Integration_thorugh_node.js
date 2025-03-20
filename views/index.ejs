@@ -5,46 +5,191 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title %></title>
     <link rel="stylesheet" href="../public/styles.css">
-
 </head>
 <body>
-    <h1>Choose an option To send to whatsapp through node </h1>
-    <form action="/send-template" method="POST">
-        <button type="submit">Send a Template Message</button>
-    </form>
-    <br>
-    <form action="/send-text" method="POST">
-        <button type="submit">Send a Text Message</button>
-    </form>
-    <br>
-    <form action="/send-image" method="POST">
-        <button type="submit">Send a Image Message</button>
-    </form>
-    <br>
+    <div class="container">
+        <h1>Choose an option To send to whatsapp through node </h1>
+        <form action="/send-template" method="POST">
+            <button type="submit" onclick="showMessage('Message Sent!')">Send a Template Message</button>
+        </form>
+        <br>
+        <form action="/send-text" method="POST">
+            <%- include('text') %>
+        </form>
+        <br>
+        <form action="/send-image" method="POST">
+            <button type="submit" onclick="showMessage('Image Message Sent!')">Send a Image Message</button>
+        </form>
+        <br>
+        <button id="chatToggleButton" class="chat-toggle-btn" aria-label="Toggle Chat Window">
+            💬 </button>
+    
+        <div id="chatContainer" class="chat-container" role="dialog" aria-labelledby="chatHeaderTitle" hidden>
+            <div class="chat-header">
+                <h4 id="chatHeaderTitle">Chat</h4>
+                <button id="closeChatButton" class="close-chat-btn" aria-label="Close Chat Window">&times;</button>
+            </div>
+    
+            <div id="chatbox" class="chat-body" role="log" aria-live="polite">
+                <div class="system-message">Welcome! Connecting...</div>
+            </div>
+    
+            <div class="chat-footer">
+                <input type="text" id="messageInput" placeholder="Type your message..." aria-label="Message Input">
+                <button id="sendButton">Send</button>
+            </div>
+        </div>
 
-    <p id="response"></p>
+    <script>
+        function showMessage(msg) {
+            const responseElement = document.getElementById("response");
+            if (responseElement) {
+                responseElement.innerText = msg;
+                responseElement.style.display = "block";
+
+                // Hide message after 10 seconds
+                setTimeout(() => {
+                    responseElement.style.display = "none";
+                }, 10000);
+            }
+        }
+        const chatbox = document.getElementById('chatbox');
+        const messageInput = document.getElementById('messageInput');
+        const sendButton = document.getElementById('sendButton');
+        const chatToggleButton = document.getElementById('chatToggleButton');
+        const chatContainer = document.getElementById('chatContainer');
+        const closeChatButton = document.getElementById('closeChatButton');
+
+        // Determine WebSocket protocol based on window location protocol
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}`; // Connect to the same host/port
+        let socket;
+
+        function addMessage(text, className = 'system-message') {
+            const div = document.createElement('div');
+            div.classList.add('message', className);
+            div.textContent = text;
+            chatbox.appendChild(div);
+            chatbox.scrollTop = chatbox.scrollHeight; // Scroll to bottom
+        }
+
+        function connectWebSocket() {
+            addMessage('Connecting to WebSocket...');
+            socket = new WebSocket(wsUrl);
+
+            socket.onopen = function(event) {
+                console.log('WebSocket connection opened');
+                addMessage('Connected!', 'system-message');
+            };
+
+            socket.onmessage = function(event) {
+                console.log('Message from server:', event.data);
+                try {
+                    const messageData = JSON.parse(event.data);
+                    if (messageData.type === 'whatsapp_message') {
+                        addMessage(`WhatsApp: ${messageData.payload}`, 'whatsapp-message');
+                    } else if (messageData.type === 'your_message') {
+                        // If server echoes back your sent message (optional)
+                        addMessage(`You: ${messageData.payload}`, 'my-message');
+                    } else if (messageData.type === 'connection_ack') {
+                        addMessage(`Server: ${messageData.payload}`, 'system-message');
+                    } else if (messageData.type === 'error') {
+                        addMessage(`Error: ${messageData.payload}`, 'system-message');
+                    }
+                    else {
+                        addMessage(`Server: ${messageData.payload || event.data}`, 'system-message'); // Fallback
+                    }
+                } catch (e) {
+                    console.error("Error parsing server message:", e);
+                    addMessage(`Raw message: ${event.data}`, 'system-message'); // Display raw if parse fails
+                }
+            };
+
+            socket.onclose = function(event) {
+                console.log('WebSocket connection closed:', event);
+                addMessage(`Disconnected. Code: ${event.code}. ${event.reason ? 'Reason: ' + event.reason : ''}`, 'system-message');
+                // Optional: Try to reconnect after a delay
+                setTimeout(connectWebSocket, 5000); // Reconnect after 5 seconds
+            };
+
+            socket.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                addMessage('WebSocket error occurred. Check console.', 'system-message');
+                // The 'onclose' event will usually fire after an error.
+            };
+        }
+
+
+        function sendMessage() {
+            const messageText = messageInput.value.trim();
+            if (messageText && socket && socket.readyState === WebSocket.OPEN) {
+                const messagePayload = {
+                    type: 'chat_message',
+                    payload: messageText
+                };
+                socket.send(JSON.stringify(messagePayload));
+                console.log('Sent message to server:', messagePayload);
+                // Add message to UI immediately for better UX
+                addMessage(`You: ${messageText}`, 'my-message');
+                messageInput.value = ''; // Clear input
+            } else if (!socket || socket.readyState !== WebSocket.OPEN) {
+                addMessage('Not connected. Cannot send message.', 'system-message');
+            }
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        messageInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Initial connection attempt
+        connectWebSocket();
+
+        // Chat toggle functionality
+        chatToggleButton.addEventListener('click', function() {
+            chatContainer.hidden = !chatContainer.hidden;
+        });
+
+        // Close chat button functionality
+        closeChatButton.addEventListener('click', function() {
+            chatContainer.hidden = true;
+        });
+    </script>
+
 </body>
+
 <style>
     body {
-    font-family: Arial, sans-serif;
-    text-align: center;
-    background-color: #f4f4f4;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
+        font-family: Arial, sans-serif;
+        text-align: center;
+        background-color: #f4f4f4;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+    }
+
+    .container {
+        background-color: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     }
 
     h1 {
         color: #333;
         margin-bottom: 20px;
     }
+
     form {
         margin: 10px 0;
     }
+
     button {
         background-color: #007bff;
         color: white;
@@ -55,6 +200,7 @@
         border-radius: 5px;
         transition: background-color 0.3s ease;
         width: 250px;
+        box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
     }
 
     button:hover {
@@ -68,17 +214,142 @@
         font-weight: bold;
     }
 
-    button {
-        box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
-    }
-
     @media (max-width: 600px) {
         button {
             width: 80%;
         }
     }
 
+    .chat-toggle-btn {
+    position: fixed; /* Keep it in place */
+    bottom: 20px;
+    right: 20px;
+    width: 55px;   /* Size of the button */
+    height: 55px;
+    background-color: #007bff; /* Example blue color */
+    color: white;
+    border: none;
+    border-radius: 50%; /* Make it circular */
+    font-size: 24px;    /* Size of the icon/emoji */
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1000;      /* Ensure it's above other content */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background-color 0.2s ease; /* Smooth hover effect */
+}
+
+.chat-toggle-btn:hover {
+    background-color: #0056b3; /* Darker blue on hover */
+}
+
+/* Chat Window Container */
+.chat-container {
+    position: fixed;
+    bottom: 90px; /* Position above the toggle button */
+    right: 20px;
+    width: 320px;  /* Width of the chat window */
+    max-height: 450px; /* Maximum height */
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    z-index: 999; /* Slightly below button if needed, or same */
+    overflow: hidden; /* Prevents content spillover */
+    display: flex; /* Use flexbox for internal layout */
+    flex-direction: column; /* Stack header, body, footer vertically */
+    /* Transition for smooth opening/closing */
+    visibility: hidden; /* Start hidden (better for accessibility than display:none) */
+    opacity: 0;
+    transform: translateY(10px); /* Start slightly lower */
+    transition: visibility 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Style for when the chat container is shown */
+.chat-container:not([hidden]) {
+    visibility: visible;
+    opacity: 1;
+    transform: translateY(0); /* Move to final position */
+}
+
+
+/* Chat Header */
+.chat-header {
+    background-color: #007bff;
+    color: white;
+    padding: 10px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+.chat-header h4 {
+    margin: 0;
+    font-size: 1.1em;
+}
+
+.close-chat-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 22px;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0 5px;
+    line-height: 1;
+}
+
+/* Chat Body */
+.chat-body {
+    padding: 15px;
+    overflow-y: auto; /* Allow scrolling for messages */
+    flex-grow: 1; /* Take available vertical space */
+    background-color: #f9f9f9;
+    min-height: 100px; /* Ensure it has some minimum height */
+}
+
+/* Example Message Styling (add more as needed) */
+.system-message {
+    font-style: italic;
+    color: grey;
+    text-align: center;
+    font-size: 0.9em;
+    margin-bottom: 10px;
+}
+
+/* Chat Footer */
+.chat-footer {
+    padding: 10px;
+    border-top: 1px solid #ddd;
+    display: flex;
+    background-color: #fff;
+    flex-shrink: 0; /* Prevent footer from shrinking */
+}
+
+.chat-footer input[type="text"] {
+    flex-grow: 1;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-right: 8px;
+}
+
+.chat-footer button {
+    padding: 8px 15px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.chat-footer button:hover {
+    background-color: #0056b3;
+}
 </style>
 </html>
+
 
 
