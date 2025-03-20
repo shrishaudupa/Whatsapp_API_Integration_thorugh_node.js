@@ -62,14 +62,13 @@ async function refreshAccessToken() {
     }
 }
 
-// Schedule token refresh daily at midnight
 cron.schedule("0 0 * * *", () => {
     const lastRefresh = getLastRefreshTime();
     const now = Date.now();
     const fiftyFiveDays = 55 * 24 * 60 * 60 * 1000; // 55 days in milliseconds
 
     if (now - lastRefresh >= fiftyFiveDays) {
-        console.log("🔄 Refreshing WhatsApp API Token...");
+        console.log("Refreshing WhatsApp API Token...");
         refreshAccessToken();
     } else {
         console.log("Token refresh not needed yet.");
