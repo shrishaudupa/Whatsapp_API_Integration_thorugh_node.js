@@ -9,11 +9,18 @@
 <body>
     <div class="container">
         <h1>Choose an option To send to whatsapp through node </h1>
+        <form action="/submit" method="POST">
+            <%- include('numberOptions') %>
+            <button type="submit" class="no">OK</button>
+        </form>
+        
+        
         <form action="/send-template" method="POST">
             <button type="submit" onclick="showMessage('Message Sent!')">Send a Template Message</button>
         </form>
         <br>
         <form action="/send-text" method="POST">
+            
             <%- include('text') %>
         </form>
         <br>
@@ -27,6 +34,10 @@
         <div id="chatContainer" class="chat-container" role="dialog" aria-labelledby="chatHeaderTitle" hidden>
             <div class="chat-header">
                 <h4 id="chatHeaderTitle">Chat</h4>
+                <button class="choose_number"><form action="/submit" method="POST">
+                    <%- include('numberOptions') %>
+                    <button type="submit" class="no">OK</button>
+                </form>
                 <button id="closeChatButton" class="close-chat-btn" aria-label="Close Chat Window">&times;</button>
             </div>
     
@@ -202,6 +213,19 @@
         width: 250px;
         box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
     }
+
+    .no{
+        background-color: red;
+        color: white;
+        border: none;
+        font-size: 16px;
+        text-align: center;
+        position: relative;
+        cursor: pointer;
+        transition: background-color 0.3s ease;
+        width: 75px;
+        box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+        }
 
     button:hover {
         background-color: #0056b3;

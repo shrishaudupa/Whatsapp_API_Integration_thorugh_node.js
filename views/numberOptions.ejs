@@ -1,0 +1,13 @@
+<select id="phonenumber" name="phonenumber" class="form-control">
+    <option value="">Choose a Phone Number</option>
+    <% for (var count = 0; count < phone_numbers.length; count++) { %>
+        <option value="<%= phone_numbers[count] %>"><%= phone_numbers[count] %></option>
+    <% } %>
+</select>
+
+<style>
+select {
+    padding: 8px;
+    font-size: 16px;
+}
+</style>

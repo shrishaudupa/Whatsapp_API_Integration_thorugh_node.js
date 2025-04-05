@@ -11,7 +11,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({path: path.resolve(__dirname,'../config/.env')});
 
 
-async function sendMediaMessage() {
+async function sendMediaMessage(recipient) {
     const response = await axios({
         url: process.env.URL,
         method: 'post',
@@ -21,7 +21,7 @@ async function sendMediaMessage() {
         },
         data: JSON.stringify({
             messaging_product: 'whatsapp',
-            to: process.env.TO,
+            to: recipient,
             type: 'image',
             image:{
                 link: 'https://dummyimage.com/600x400/000/fff.png&text=Shrisha Udupa',
@@ -35,4 +35,4 @@ async function sendMediaMessage() {
     console.log(response.data)    
   }
 
-export { sendMediaMessage }
+export { sendMediaMessage };
